@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Visitor QR Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      text-align: center;
+      padding: 10px;
+    }
+
+    #reader {
+      width: 300px;
+      margin: auto;
+    }
+
+    pre {
+      background: #fff;
+      padding: 10px;
+      text-align: left;
+      max-height: 180px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+
+    button {
+      padding: 10px 16px;
+      margin: 6px;
+      font-size: 15px;
+      border: none;
+      border-radius: 6px;
+      background: #0a7d2c;
+      color: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px;
+    }
+
+    th {
+      background: #ddd;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>Visitor QR Scanner</h2>
+
+<div id="reader"></div>
+
+<h3>Scanned vCard</h3>
+<pre id="raw">Waiting for scan…</pre>
+
+<button onclick="saveVisitor()">Save to History</button>
+<button onclick="downloadExcel()">Download Excel</button>
+<button onclick="clearAll()">Clear All</button>
+
+<h3>Saved Visitors</h3>
+<table id="table">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Name</th>
+      <th>Org</th>
+      <th>Phone</th>
+      <th>City</th>
+      <th>Email</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+let scannedVcard = "";
+let visitors = JSON.parse(localStorage.getItem("visitors") || "[]");
+
+// QR Scanner
+new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 })
+  .render(text => {
+    scannedVcard = text;
+    document.getElementById("raw").innerText = text;
+  });
+
+// vCard parser
+function parseVCard(v) {
+  const get = r => (v.match(r) || ["",""])[1].trim();
+  return {
+    time: new Date().toLocaleString(),
+    name: get(/FN:(.*)/),
+    org: get(/ORG:(.*)/),
+    phone: get(/TEL.*:(.*)/),
+    city: get(/City:\s*(.*?)\s*;/),
+    email: get(/EMAIL.*:(.*)/)
+  };
+}
+
+// Save to local history
+function saveVisitor() {
+  if (!scannedVcard) {
+    alert("Scan QR first");
+    return;
+  }
+
+  const data = parseVCard(scannedVcard);
+
+  // prevent duplicate phone
+  if (visitors.some(v => v.phone === data.phone && data.phone)) {
+    alert("Duplicate phone detected");
+    return;
+  }
+
+  visitors.push(data);
+  localStorage.setItem("visitors", JSON.stringify(visitors));
+  renderTable();
+  alert("Saved offline ✅");
+}
+
+// Render table
+function renderTable() {
+  const tbody = document.querySelector("#table tbody");
+  tbody.innerHTML = "";
+  visitors.forEach(v => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${v.time}</td>
+        <td>${v.name}</td>
+        <td>${v.org}</td>
+        <td>${v.phone}</td>
+        <td>${v.city}</td>
+        <td>${v.email}</td>
+      </tr>`;
+  });
+}
+renderTable();
+
+// Export Excel (CSV)
+function downloadExcel() {
+  if (visitors.length === 0) {
+    alert("No data");
+    return;
+  }
+
+  let csv = "Time,Name,Organization,Phone,City,Email\n";
+  visitors.forEach(v => {
+    csv += `"${v.time}","${v.name}","${v.org}","${v.phone}","${v.city}","${v.email}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "visitor_data_" + Date.now() + ".csv";
+  a.click();
+}
+
+// Clear data
+function clearAll() {
+  if (confirm("Clear all data?")) {
+    localStorage.removeItem("visitors");
+    visitors = [];
+    renderTable();
+  }
+}
+</script>
+
+</body>
+</html>
